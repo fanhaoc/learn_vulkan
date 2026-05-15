@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.10)
+project(Learn_Vulkan)
+find_package(fmt CONFIG REQUIRED)
+add_executable(Learn_Vulkan Learn_Vulkan.cpp)
+target_link_libraries(Learn_Vulkan PRIVATE fmt::fmt)
