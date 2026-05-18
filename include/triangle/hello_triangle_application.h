@@ -8,15 +8,18 @@ constexpr uint32_t HEIGHT = 600;
 const std::vector<char const*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
 };
+std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 #ifdef NDEBUG
 constexpr bool enableValidationLayers = false;
 #else
-constexpr bool enabelValidationLayers = true;
+constexpr bool enableValidationLayers = true;
 #endif // NDEBUG
 
 
 class HelloTriangleApplication {
 public:
+	vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
+	vk::raii::PhysicalDevice physicalDevice = nullptr;
 	HelloTriangleApplication() {};
 	~HelloTriangleApplication() {};
 	void run();
@@ -27,6 +30,9 @@ private:
 	void initWindow();
 	void initVulkan();
 	void createInstance();
+	void setupDebugMessenger();
+	void pickPhysicalDevice();
+	bool isDeviceSuitable(vk::raii::PhysicalDevice const& physicalDevice);
 	void mainLoop();
 	void cleanup();
 

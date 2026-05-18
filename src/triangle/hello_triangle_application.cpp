@@ -2,6 +2,17 @@
 #define GLFW_INCLUDE_VULKAN
 #include<GLFW/glfw3.h>
 #include <iostream>
+#include <map>
+
+static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT       severity,
+	vk::DebugUtilsMessageTypeFlagsEXT              type,
+	const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
+	void* pUserData)
+{
+	std::cerr << "validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
+
+	return vk::False;
+}
 
 
 void HelloTriangleApplication::run() {
@@ -22,6 +33,8 @@ void HelloTriangleApplication::initWindow() {
 
 void HelloTriangleApplication::initVulkan() {
 	createInstance();
+	setupDebugMessenger();
+	pickPhysicalDevice();
 }
 
 void HelloTriangleApplication::createInstance() {
@@ -37,7 +50,7 @@ void HelloTriangleApplication::createInstance() {
 	uint32_t glfwExtensionCount = 0;
 	auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 	std::vector<const char*> requiredExtensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-	if (enabelValidationLayers) {
+	if (enableValidationLayers) {
 		requiredExtensions.push_back(vk::EXTDebugUtilsExtensionName);
 	}
 	// Check if the required GLFW extensions are supported by the Vulkan implementation.
@@ -53,7 +66,7 @@ void HelloTriangleApplication::createInstance() {
 
 	// 验证是否支持所有需要的layer
 	std::vector<char const*> requiredLayers;
-	if (enabelValidationLayers) {
+	if (enableValidationLayers) {
 		requiredLayers.assign(validationLayers.begin(), validationLayers.end());
 	}
 	std::vector<vk::LayerProperties> layerProperties = context.enumerateInstanceLayerProperties();
@@ -75,6 +88,67 @@ void HelloTriangleApplication::createInstance() {
 	};
 
 	instance = vk::raii::Instance(context, createInfo);
+}
+
+void HelloTriangleApplication::setupDebugMessenger() {
+	if (!enableValidationLayers) return;
+	vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+		vk::DebugUtilsMessageSeverityFlagBitsEXT::eError);
+	vk::DebugUtilsMessageTypeFlagsEXT     messageTypeFlags(
+		vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation);
+	vk::DebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfoEXT{ .messageSeverity = severityFlags,
+																		  .messageType = messageTypeFlags,
+																		  .pfnUserCallback = &debugCallback };
+	debugMessenger = instance.createDebugUtilsMessengerEXT(debugUtilsMessengerCreateInfoEXT);
+}
+
+void HelloTriangleApplication::pickPhysicalDevice() {
+	auto physicalDevices = vk::raii::PhysicalDevices(instance);
+	const auto devIter = std::ranges::find_if(
+		physicalDevices, [&](const auto& physicalDevice) {
+			return isDeviceSuitable(physicalDevice);
+		});
+	if (devIter == physicalDevices.end()) {
+		throw std::runtime_error("failed to find a suitable GPU!");
+	}
+	physicalDevice = *devIter;
+}
+
+
+bool HelloTriangleApplication::isDeviceSuitable(vk::raii::PhysicalDevice const& physicalDevice) {
+	auto deviceProperties = physicalDevice.getProperties();
+	auto deviceFeature = physicalDevice.getFeatures();
+
+	// Check if the physicalDevice supports the Vulkan 1.3 API version
+	bool supportsVulkan1_3 = deviceProperties.apiVersion >= vk::ApiVersion13;
+	// Check if any of the queue families support graphics operations
+	auto queueFamilies = physicalDevice.getQueueFamilyProperties();
+	bool supportsGraphics = std::ranges::any_of(
+		queueFamilies, [](const auto& qfp) {
+			return !!(qfp.queueFlags & vk::QueueFlagBits::eGraphics);
+		}
+	);
+	// Check if all required physicalDevice extensions are available
+	auto availableDeviceExtensions = physicalDevice.enumerateDeviceExtensionProperties();
+	bool supportsAllrequiredExtensions = std::ranges::all_of(
+		requiredDeviceExtension, [&availableDeviceExtensions](const auto& requiredDeviceExtension) {
+			return std::ranges::any_of(
+				availableDeviceExtensions, [requiredDeviceExtension](const auto& availableDeviceExtension) {
+					return strcmp(requiredDeviceExtension, availableDeviceExtension.extensionName) == 0;
+				});
+		}
+	);
+	// Check if the physicalDevice supports the required features (dynamic rendering and extended dynamic state)
+	auto features = physicalDevice.template getFeatures2<
+		vk::PhysicalDeviceFeatures2,
+		vk::PhysicalDeviceVulkan13Features,
+		vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+	bool supportsRequiredFeatures = features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
+		features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
+
+	// Return true if the physicalDevice meets all the criteria
+	return supportsVulkan1_3 && supportsGraphics && supportsAllrequiredExtensions && supportsRequiredFeatures;
+
 }
 
 void HelloTriangleApplication::mainLoop() {
