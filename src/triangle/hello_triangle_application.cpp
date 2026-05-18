@@ -37,6 +37,9 @@ void HelloTriangleApplication::createInstance() {
 	uint32_t glfwExtensionCount = 0;
 	auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 	std::vector<const char*> requiredExtensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+	if (enabelValidationLayers) {
+		requiredExtensions.push_back(vk::EXTDebugUtilsExtensionName);
+	}
 	// Check if the required GLFW extensions are supported by the Vulkan implementation.
 	auto extensionProperties = context.enumerateInstanceExtensionProperties();
 	auto unsupportPropertyIt = std::ranges::find_if(requiredExtensions, [&extensionProperties](auto const& requiredExtension) {
