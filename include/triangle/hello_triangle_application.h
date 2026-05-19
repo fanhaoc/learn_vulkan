@@ -5,10 +5,7 @@ struct GLFWwindow;
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 
-const std::vector<char const*> validationLayers = {
-	"VK_LAYER_KHRONOS_validation"
-};
-std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
+
 #ifdef NDEBUG
 constexpr bool enableValidationLayers = false;
 #else
@@ -18,10 +15,16 @@ constexpr bool enableValidationLayers = true;
 
 class HelloTriangleApplication {
 public:
+	const std::vector<char const*> validationLayers = {
+	"VK_LAYER_KHRONOS_validation"
+	};
+	std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 	vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
 	vk::raii::PhysicalDevice physicalDevice = nullptr;
-	HelloTriangleApplication() {};
-	~HelloTriangleApplication() {};
+	vk::raii::Device device = nullptr;
+	vk::raii::Queue graphicsQueue = nullptr;
+	HelloTriangleApplication();
+	~HelloTriangleApplication();
 	void run();
 private:
 	GLFWwindow* window;
@@ -32,6 +35,7 @@ private:
 	void createInstance();
 	void setupDebugMessenger();
 	void pickPhysicalDevice();
+	void createLogicalDevice();
 	bool isDeviceSuitable(vk::raii::PhysicalDevice const& physicalDevice);
 	void mainLoop();
 	void cleanup();
