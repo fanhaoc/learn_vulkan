@@ -45,6 +45,7 @@ void HelloTriangleApplication::initVulkan() {
 	setupDebugMessenger();
 	pickPhysicalDevice();
 	createLogicalDevice();
+	createSurface();
 }
 
 void HelloTriangleApplication::createInstance() {
@@ -193,6 +194,14 @@ void HelloTriangleApplication::createLogicalDevice(){
 
 	device = vk::raii::Device(physicalDevice, deviceCreateInfo);
 	graphicsQueue = vk::raii::Queue(device, graphicsIndex, 0);
+}
+
+void HelloTriangleApplication::createSurface() {
+	VkSurfaceKHR _surface;
+	if (glfwCreateWindowSurface(*instance, window, nullptr, &_surface) != 0) {
+		throw std::runtime_error("failed to create window surface!");
+	}
+	surface = vk::raii::SurfaceKHR(instance, _surface);
 }
 
 void HelloTriangleApplication::mainLoop() {

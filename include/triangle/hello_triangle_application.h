@@ -19,24 +19,26 @@ public:
 	"VK_LAYER_KHRONOS_validation"
 	};
 	std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
+	GLFWwindow* window;
+	vk::raii::Context context;
+	vk::raii::Instance instance = nullptr;
 	vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
 	vk::raii::PhysicalDevice physicalDevice = nullptr;
 	vk::raii::Device device = nullptr;
 	vk::raii::Queue graphicsQueue = nullptr;
+	vk::raii::SurfaceKHR surface = nullptr;
 	HelloTriangleApplication();
 	~HelloTriangleApplication();
 	void run();
 private:
-	GLFWwindow* window;
-	vk::raii::Context context;
-	vk::raii::Instance instance = nullptr;
 	void initWindow();
 	void initVulkan();
 	void createInstance();
 	void setupDebugMessenger();
 	void pickPhysicalDevice();
-	void createLogicalDevice();
 	bool isDeviceSuitable(vk::raii::PhysicalDevice const& physicalDevice);
+	void createLogicalDevice();
+	void createSurface();
 	void mainLoop();
 	void cleanup();
 
