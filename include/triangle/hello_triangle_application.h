@@ -39,6 +39,9 @@ private:
 	bool isDeviceSuitable(vk::raii::PhysicalDevice const& physicalDevice);
 	void createLogicalDevice();
 	void createSurface();
+	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(std::vector<vk::SurfaceFormatKHR> const& availableFormats);
+	vk::PresentModeKHR chooseSwapPresentMode(std::vector<vk::PresentModeKHR> const& availablePresentModes);
+	vk::Extent2D chooseSwapExtent(vk::SurfaceCapabilitiesKHR const& capabilities);
 	void mainLoop();
 	void cleanup();
 

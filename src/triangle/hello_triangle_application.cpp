@@ -3,6 +3,9 @@
 #include<GLFW/glfw3.h>
 #include <iostream>
 #include <map>
+#include <cstdint> // Necessary for uint32_t
+#include <limits> // Necessary for std::numeric_limits
+#include <algorithm> // Necessary for std::clamp
 
 static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT       severity,
 	vk::DebugUtilsMessageTypeFlagsEXT              type,
@@ -43,9 +46,10 @@ void HelloTriangleApplication::initWindow() {
 void HelloTriangleApplication::initVulkan() {
 	createInstance();
 	setupDebugMessenger();
+	createSurface();
 	pickPhysicalDevice();
 	createLogicalDevice();
-	createSurface();
+	
 }
 
 void HelloTriangleApplication::createInstance() {
@@ -163,15 +167,24 @@ bool HelloTriangleApplication::isDeviceSuitable(vk::raii::PhysicalDevice const& 
 
 void HelloTriangleApplication::createLogicalDevice(){
 	std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
-	auto graphicsQueueFamilyProperty = std::ranges::find_if(
-		queueFamilyProperties, [](const auto& qfp) {
-			return (qfp.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
+	uint32_t queueIndex = ~0;
+	for (uint32_t qfpIndex = 0; qfpIndex < queueFamilyProperties.size(); qfpIndex++)
+	{
+		if ((queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eGraphics) &&
+			physicalDevice.getSurfaceSupportKHR(qfpIndex, *surface))
+		{
+			// found a queue family that supports both graphics and present
+			queueIndex = qfpIndex;
+			break;
 		}
-	);
-	auto graphicsIndex = static_cast<uint32_t>(std::distance(queueFamilyProperties.begin(), graphicsQueueFamilyProperty));
+	}
+	if (queueIndex == ~0)
+	{
+		throw std::runtime_error("Could not find a queue for graphics and present -> terminating");
+	}
 	float queuePriority = 0.5f;
 	vk::DeviceQueueCreateInfo deviceQueueCreateInfo{
-		.queueFamilyIndex = graphicsIndex,
+		.queueFamilyIndex = queueIndex,
 		.queueCount = 1,
 		.pQueuePriorities = &queuePriority
 	};
@@ -193,7 +206,7 @@ void HelloTriangleApplication::createLogicalDevice(){
 	};
 
 	device = vk::raii::Device(physicalDevice, deviceCreateInfo);
-	graphicsQueue = vk::raii::Queue(device, graphicsIndex, 0);
+	graphicsQueue = vk::raii::Queue(device, queueIndex, 0);
 }
 
 void HelloTriangleApplication::createSurface() {
@@ -202,6 +215,39 @@ void HelloTriangleApplication::createSurface() {
 		throw std::runtime_error("failed to create window surface!");
 	}
 	surface = vk::raii::SurfaceKHR(instance, _surface);
+}
+
+vk::SurfaceFormatKHR HelloTriangleApplication::chooseSwapSurfaceFormat(std::vector<vk::SurfaceFormatKHR> const& availableFormats) {
+	auto const formatIt = std::ranges::find_if(
+		availableFormats, [](auto const& format) {
+			return format.format == vk::Format::eB8G8R8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
+		}
+	);
+	return formatIt != availableFormats.end() ? *formatIt : availableFormats[0];
+}
+
+vk::PresentModeKHR HelloTriangleApplication::chooseSwapPresentMode(std::vector<vk::PresentModeKHR> const& availablePresentModes) {
+	assert(
+		std::ranges::any_of(availablePresentModes, [](vk::PresentModeKHR const presentMode) {
+				return presentMode == vk::PresentModeKHR::eFifo;
+			})
+	);
+	return std::ranges::any_of(
+		availablePresentModes, [](vk::PresentModeKHR const value) {
+			return vk::PresentModeKHR::eMailbox == value;
+		}) ? vk::PresentModeKHR::eMailbox : vk::PresentModeKHR::eFifo;
+}
+
+vk::Extent2D HelloTriangleApplication::chooseSwapExtent(vk::SurfaceCapabilitiesKHR const& capabilities) {
+	if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+		return capabilities.currentExtent;
+	}
+	int width, height;
+	glfwGetFramebufferSize(window, &width, &height);
+	return {
+		std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+		std::clamp<uint32_t>(height, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+	};
 }
 
 void HelloTriangleApplication::mainLoop() {
