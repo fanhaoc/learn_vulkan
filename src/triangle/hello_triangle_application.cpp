@@ -49,6 +49,7 @@ void HelloTriangleApplication::initVulkan() {
 	createSurface();
 	pickPhysicalDevice();
 	createLogicalDevice();
+	createSwapChain();
 	
 }
 
@@ -248,6 +249,40 @@ vk::Extent2D HelloTriangleApplication::chooseSwapExtent(vk::SurfaceCapabilitiesK
 		std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
 		std::clamp<uint32_t>(height, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
 	};
+}
+
+uint32_t HelloTriangleApplication::chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities) {
+	auto minImageCount = std::max(3u, surfaceCapabilities.minImageCount);
+	if (0 < surfaceCapabilities.maxImageCount && (surfaceCapabilities.maxImageCount < minImageCount)) {
+		minImageCount = surfaceCapabilities.maxImageCount;
+	}
+	return minImageCount;
+}
+
+void HelloTriangleApplication::createSwapChain() {
+	vk::SurfaceCapabilitiesKHR surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR(*surface);
+	swapChainExtent = chooseSwapExtent(surfaceCapabilities);
+	uint32_t minImageCount = chooseSwapMinImageCount(surfaceCapabilities);
+	std::vector<vk::SurfaceFormatKHR> availableFormats = physicalDevice.getSurfaceFormatsKHR(*surface);
+	std::vector<vk::PresentModeKHR> availablePresentModes = physicalDevice.getSurfacePresentModesKHR(surface);
+	swapChainSurfaceFormat = chooseSwapSurfaceFormat(availableFormats);
+
+	vk::SwapchainCreateInfoKHR swapChainCreateInfo{
+		.surface = *surface,
+		.minImageCount = minImageCount,
+		.imageFormat = swapChainSurfaceFormat.format,
+		.imageColorSpace = swapChainSurfaceFormat.colorSpace,
+		.imageExtent = swapChainExtent,
+		.imageArrayLayers = 1,
+		.imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+		.imageSharingMode = vk::SharingMode::eExclusive,
+		.preTransform = surfaceCapabilities.currentTransform,
+		.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
+		.presentMode = chooseSwapPresentMode(availablePresentModes),
+		.clipped = true
+	};
+	swapChain = vk::raii::SwapchainKHR(device, swapChainCreateInfo);
+	swapChainImages = swapChain.getImages();
 }
 
 void HelloTriangleApplication::mainLoop() {
