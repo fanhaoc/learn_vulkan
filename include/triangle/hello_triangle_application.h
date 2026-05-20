@@ -50,6 +50,7 @@ private:
 	uint32_t chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities);
 	void createSwapChain();
 	void createImageViews();
+	void createGraphicsPipeline();
 	void mainLoop();
 	void cleanup();
 

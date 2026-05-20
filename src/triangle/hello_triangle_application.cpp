@@ -1,4 +1,5 @@
 #include "triangle/hello_triangle_application.h"
+#include "helper.cpp"
 #define GLFW_INCLUDE_VULKAN
 #include<GLFW/glfw3.h>
 #include <iostream>
@@ -51,6 +52,7 @@ void HelloTriangleApplication::initVulkan() {
 	createLogicalDevice();
 	createSwapChain();
 	createImageViews();
+	createGraphicsPipeline();
 	
 }
 
@@ -297,6 +299,24 @@ void HelloTriangleApplication::createImageViews() {
 		imageViewCreateInfo.image = image;
 		swapChainImageViews.emplace_back(device, imageViewCreateInfo);
 	}
+}
+
+void HelloTriangleApplication::createGraphicsPipeline() {
+	auto shaderCode = readShaderFile("./shaders/spirv/slang.spv");
+	std::cout << "shaderSize:" << shaderCode.size() << std::endl;
+	vk::raii::ShaderModule shaderModule = createShaderModule(shaderCode, device);
+	vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
+		.stage = vk::ShaderStageFlagBits::eVertex,
+		.module = shaderModule,
+		.pName = "vertMain"
+	};
+	vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
+		.stage = vk::ShaderStageFlagBits::eFragment,
+		.module = shaderModule,
+		.pName = "fragMain"
+	};
+
+	vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 }
 
 void HelloTriangleApplication::mainLoop() {

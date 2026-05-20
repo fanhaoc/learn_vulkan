@@ -16,3 +16,4 @@ target_compile_definitions(Learn_Vulkan PRIVATE VULKAN_HPP_NO_STRUCT_CONSTRUCTOR
 
 target_include_directories(Learn_Vulkan PRIVATE src)
 target_include_directories(Learn_Vulkan PUBLIC include)
+target_include_directories(Learn_Vulkan PUBLIC shaders)
