@@ -32,6 +32,7 @@ public:
 	std::vector<vk::raii::ImageView> swapChainImageViews;
 	vk::SurfaceFormatKHR swapChainSurfaceFormat;
 	vk::Extent2D swapChainExtent;
+	vk::raii::PipelineLayout pipelineLayout = nullptr;
 	HelloTriangleApplication();
 	~HelloTriangleApplication();
 	void run();
