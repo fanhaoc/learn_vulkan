@@ -53,6 +53,8 @@ void HelloTriangleApplication::initVulkan() {
 	createSwapChain();
 	createImageViews();
 	createGraphicsPipeline();
+	createCommandPool();
+	createCommandBuffer();
 	
 }
 
@@ -171,7 +173,6 @@ bool HelloTriangleApplication::isDeviceSuitable(vk::raii::PhysicalDevice const& 
 
 void HelloTriangleApplication::createLogicalDevice(){
 	std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
-	uint32_t queueIndex = ~0;
 	for (uint32_t qfpIndex = 0; qfpIndex < queueFamilyProperties.size(); qfpIndex++)
 	{
 		if ((queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eGraphics) &&
@@ -323,13 +324,13 @@ void HelloTriangleApplication::createGraphicsPipeline() {
 		.topology = vk::PrimitiveTopology::eTriangleList
 	};
 
-	//std::vector<vk::DynamicState> dynamicStates = {
-	//	vk::DynamicState::eViewport, vk::DynamicState::eScissor
-	//};
-	//vk::PipelineDynamicStateCreateInfo dynamicState{
-	//	.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
-	//	.pDynamicStates = dynamicStates.data()
-	//};
+	std::vector<vk::DynamicState> dynamicStates = {
+		vk::DynamicState::eViewport, vk::DynamicState::eScissor
+	};
+	vk::PipelineDynamicStateCreateInfo dynamicState{
+		.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+		.pDynamicStates = dynamicStates.data()
+	};
 
 	vk::Viewport viewport{
 		0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f
@@ -376,6 +377,82 @@ void HelloTriangleApplication::createGraphicsPipeline() {
 	};
 	pipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
 
+
+	vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipelineCreateInfoChain = {
+		{
+			.stageCount = 2,
+			.pStages = shaderStages,
+			.pVertexInputState = &vertexInputInfo,
+			.pInputAssemblyState = &inputAssembly,
+			.pViewportState = &viewportState,
+			.pRasterizationState = &rasterizer,
+			.pMultisampleState = &multisampling,
+			.pColorBlendState = &colorBlending,
+			.pDynamicState = &dynamicState,
+			.layout = pipelineLayout,
+			.renderPass = nullptr
+		},
+		{
+			.colorAttachmentCount = 1,
+			.pColorAttachmentFormats = &swapChainSurfaceFormat.format
+		}
+	};
+
+}
+
+void HelloTriangleApplication::createCommandPool() {
+	vk::CommandPoolCreateInfo poolInfo{
+		.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+		.queueFamilyIndex = queueIndex
+	};
+	commandPool = vk::raii::CommandPool(device, poolInfo);
+}
+
+void HelloTriangleApplication::createCommandBuffer() {
+	vk::CommandBufferAllocateInfo allocInfo{
+		.commandPool = commandPool,
+		.level = vk::CommandBufferLevel::ePrimary,
+		.commandBufferCount = 1
+	};
+	commandBuffer = std::move(vk::raii::CommandBuffers(device, allocInfo).front());
+}
+
+void HelloTriangleApplication::recordCommandBuffer(uint32_t imageIndex) {
+	commandBuffer.begin({});
+}
+
+void HelloTriangleApplication::transition_image_layout(
+	uint32_t imageIndex,
+	vk::ImageLayout old_layout,
+	vk::ImageLayout new_layout,
+	vk::AccessFlags2 src_access_mask,
+	vk::AccessFlags2 dst_access_mask,
+	vk::PipelineStageFlags2 src_stage_mask,
+	vk::PipelineStageFlags2 dst_stage_mask) {
+	vk::ImageMemoryBarrier2 barrier = {
+		.srcStageMask = src_stage_mask,
+		.srcAccessMask = src_access_mask,
+		.dstStageMask = dst_stage_mask,
+		.dstAccessMask = dst_access_mask,
+		.oldLayout = old_layout,
+		.newLayout = new_layout,
+		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.image = swapChainImages[imageIndex],
+		.subresourceRange = {
+			.aspectMask = vk::ImageAspectFlagBits::eColor,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1
+		}
+	};
+	vk::DependencyInfo dependency_info = {
+		.dependencyFlags = {},
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &barrier
+	};
+	commandBuffer.pipelineBarrier2(dependency_info);
 }
 
 void HelloTriangleApplication::mainLoop() {
