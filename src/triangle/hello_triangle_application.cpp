@@ -55,7 +55,7 @@ void HelloTriangleApplication::initVulkan() {
 	createGraphicsPipeline();
 	createCommandPool();
 	createCommandBuffer();
-	
+	createSyncObjects();
 }
 
 void HelloTriangleApplication::createInstance() {
@@ -196,10 +196,12 @@ void HelloTriangleApplication::createLogicalDevice(){
 
 	vk::StructureChain<
 		vk::PhysicalDeviceFeatures2,
+		vk::PhysicalDeviceVulkan11Features,
 		vk::PhysicalDeviceVulkan13Features,
 		vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> featureChain = {
 			{},
-			{.dynamicRendering = true},
+			{.shaderDrawParameters = true},
+			{.synchronization2 = true, .dynamicRendering = true},
 			{.extendedDynamicState = true}
 	};
 	vk::DeviceCreateInfo deviceCreateInfo{
@@ -251,7 +253,7 @@ vk::Extent2D HelloTriangleApplication::chooseSwapExtent(vk::SurfaceCapabilitiesK
 	glfwGetFramebufferSize(window, &width, &height);
 	return {
 		std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
-		std::clamp<uint32_t>(height, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+		std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height),
 	};
 }
 
@@ -268,7 +270,7 @@ void HelloTriangleApplication::createSwapChain() {
 	swapChainExtent = chooseSwapExtent(surfaceCapabilities);
 	uint32_t minImageCount = chooseSwapMinImageCount(surfaceCapabilities);
 	std::vector<vk::SurfaceFormatKHR> availableFormats = physicalDevice.getSurfaceFormatsKHR(*surface);
-	std::vector<vk::PresentModeKHR> availablePresentModes = physicalDevice.getSurfacePresentModesKHR(surface);
+	std::vector<vk::PresentModeKHR> availablePresentModes = physicalDevice.getSurfacePresentModesKHR(*surface);
 	swapChainSurfaceFormat = chooseSwapSurfaceFormat(availableFormats);
 
 	vk::SwapchainCreateInfoKHR swapChainCreateInfo{
@@ -340,9 +342,7 @@ void HelloTriangleApplication::createGraphicsPipeline() {
 	};
 	vk::PipelineViewportStateCreateInfo viewportState{
 		.viewportCount = 1,
-		.pViewports = &viewport,
 		.scissorCount = 1,
-		.pScissors = &scissor
 	};
 
 	vk::PipelineRasterizationStateCreateInfo rasterizer{
@@ -351,7 +351,7 @@ void HelloTriangleApplication::createGraphicsPipeline() {
 		.polygonMode = vk::PolygonMode::eFill,
 		.cullMode = vk::CullModeFlagBits::eBack,
 		.frontFace = vk::FrontFace::eClockwise,
-		.depthBiasClamp = vk::False,
+		.depthBiasEnable = vk::False,
 		.lineWidth = 1.0f
 	};
 
@@ -421,6 +421,12 @@ void HelloTriangleApplication::createCommandBuffer() {
 	commandBuffer = std::move(vk::raii::CommandBuffers(device, allocInfo).front());
 }
 
+void HelloTriangleApplication::createSyncObjects() {
+	presentCompleteSemaphore = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
+	renderFinishedSemaphore = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
+	drawFence = vk::raii::Fence(device, { .flags = vk::FenceCreateFlagBits::eSignaled });
+}
+
 void HelloTriangleApplication::recordCommandBuffer(uint32_t imageIndex) {
 	commandBuffer.begin({});
 
@@ -458,6 +464,7 @@ void HelloTriangleApplication::recordCommandBuffer(uint32_t imageIndex) {
 			0.0f, 1.0f
 		)
 	);
+	commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
 	commandBuffer.draw(3, 1, 0, 0);
 	commandBuffer.endRendering();
 
@@ -512,10 +519,35 @@ void HelloTriangleApplication::mainLoop() {
 		glfwPollEvents();
 		drawFrame();
 	}
+	device.waitIdle();
 }
 
 void HelloTriangleApplication::drawFrame() {
-
+	auto fenceResult = device.waitForFences(*drawFence, vk::True, UINT64_MAX);
+	if (fenceResult != vk::Result::eSuccess)
+	{
+		throw std::runtime_error("failed to wait for fence!");
+	}
+	device.resetFences(*drawFence);
+	auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphore, nullptr);
+	recordCommandBuffer(imageIndex);
+	vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+	const vk::SubmitInfo   submitInfo{ .waitSemaphoreCount = 1,
+									  .pWaitSemaphores = &*presentCompleteSemaphore,
+									  .pWaitDstStageMask = &waitDestinationStageMask,
+									  .commandBufferCount = 1,
+									  .pCommandBuffers = &*commandBuffer,
+									  .signalSemaphoreCount = 1,
+									  .pSignalSemaphores = &*renderFinishedSemaphore };
+	graphicsQueue.submit(submitInfo, *drawFence);
+	const vk::PresentInfoKHR presentInfoKHR{
+		.waitSemaphoreCount = 1,
+		.pWaitSemaphores = &*renderFinishedSemaphore,
+		.swapchainCount = 1,
+		.pSwapchains = &*swapChain,
+		.pImageIndices = &imageIndex
+	};
+	result = graphicsQueue.presentKHR(presentInfoKHR);
 }
 
 void HelloTriangleApplication::cleanup() {

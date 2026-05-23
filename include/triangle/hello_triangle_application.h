@@ -37,6 +37,9 @@ public:
 	vk::raii::Pipeline graphicPipeline = nullptr;
 	vk::raii::CommandPool commandPool = nullptr;
 	vk::raii::CommandBuffer commandBuffer = nullptr;
+	vk::raii::Semaphore presentCompleteSemaphore = nullptr;
+	vk::raii::Semaphore renderFinishedSemaphore = nullptr;
+	vk::raii::Fence drawFence = nullptr;
 	HelloTriangleApplication();
 	~HelloTriangleApplication();
 	void run();
@@ -58,6 +61,7 @@ private:
 	void createGraphicsPipeline();
 	void createCommandPool();
 	void createCommandBuffer();
+	void createSyncObjects();
 	void recordCommandBuffer(uint32_t imageIndex);
 	void transition_image_layout(
 		uint32_t imageIndex,
@@ -67,6 +71,7 @@ private:
 		vk::AccessFlags2 dst_access_mask,
 		vk::PipelineStageFlags2 src_stage_mask,
 		vk::PipelineStageFlags2 dst_stage_mask);
+	
 	void mainLoop();
 	void drawFrame();
 	void cleanup();
