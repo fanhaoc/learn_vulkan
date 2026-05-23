@@ -34,6 +34,7 @@ public:
 	vk::SurfaceFormatKHR swapChainSurfaceFormat;
 	vk::Extent2D swapChainExtent;
 	vk::raii::PipelineLayout pipelineLayout = nullptr;
+	vk::raii::Pipeline graphicPipeline = nullptr;
 	vk::raii::CommandPool commandPool = nullptr;
 	vk::raii::CommandBuffer commandBuffer = nullptr;
 	HelloTriangleApplication();
@@ -67,6 +68,7 @@ private:
 		vk::PipelineStageFlags2 src_stage_mask,
 		vk::PipelineStageFlags2 dst_stage_mask);
 	void mainLoop();
+	void drawFrame();
 	void cleanup();
 
 };
