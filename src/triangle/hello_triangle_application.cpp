@@ -59,7 +59,7 @@ void HelloTriangleApplication::initVulkan() {
 }
 
 void HelloTriangleApplication::createInstance() {
-	vk::ApplicationInfo appInfo{
+	constexpr vk::ApplicationInfo appInfo{
 		.pApplicationName = "Hello Triangle",
 		.applicationVersion = VK_MAKE_VERSION(1, 0, 0),
 		.pEngineName = "No Engine",
