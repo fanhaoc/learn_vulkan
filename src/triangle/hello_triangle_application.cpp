@@ -8,15 +8,6 @@
 #include <limits> // Necessary for std::numeric_limits
 #include <algorithm> // Necessary for std::clamp
 
-static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT       severity,
-	vk::DebugUtilsMessageTypeFlagsEXT              type,
-	const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
-	void* pUserData)
-{
-	std::cerr << "validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
-
-	return vk::False;
-}
 
 HelloTriangleApplication::HelloTriangleApplication() {
 	std::cout << "start" << std::endl;
@@ -554,4 +545,15 @@ void HelloTriangleApplication::cleanup() {
 	glfwDestroyWindow(window);
 
 	glfwTerminate();
+}
+
+VKAPI_ATTR vk::Bool32 VKAPI_CALL HelloTriangleApplication::debugCallback(
+	vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*
+){
+	if (severity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eError || severity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning)
+	{
+		std::cerr << "validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
+	}
+
+	return vk::False;
 }

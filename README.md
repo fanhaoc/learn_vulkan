@@ -24,6 +24,8 @@ strcut ApplicationInfo {
 - `enabledLayerCount`,和`ppEnabledLayerNames`用以指示需要使用的层，类型分别是`uint32_t`和`char const * const *`。
 常用的一类层就是验证层（Validation Layers），它可以在不修改程序的情况下，捕获到一些错误：API 使用错误、内存泄漏、同步问题和着色器问题等
 
+总结：
+
 ```cpp
 vk::raii::Context context;
 vk::raii::Instance instance = nullptr;
@@ -124,6 +126,8 @@ struct QueueFamilyProperties {
 
 ```
 - 扩展：类似于"1. 创建instance"，一些扩展功能需要物理设备支持。`context`的扩展和物理设备的扩展不同，这里只需要一个扩展`vk::KHRSwapChainExtensionName`，用以将渲染的图像绘制到屏幕上。
+
+总结：
 ```cpp
 // 获取所有可用物理设备
 std::vector<vk::raii::PhysicalDevice> physicalDevices = instance.enumeratePhysicalDevices();
@@ -140,7 +144,6 @@ if (devIter == physicalDevices.end())
 }
 // 选取
 vk::raii::PhysicalDevice physicalDevice = *devIter;
-
 
 
 bool isDeviceSuitable(vk::raii::PhysicalDevice const &physicalDevice){
@@ -178,4 +181,59 @@ bool isDeviceSuitable(vk::raii::PhysicalDevice const &physicalDevice){
     return supportVulkan1_3 && supportGraphics && supportsAllRequiredExtensions && supportsRequiredFeatures;
 
 }
+```
+#### 3. 创建逻辑设备
+在选取物理设备之后，需要创建逻辑设备`vk::raii::Device`与物理设备进行交互，可以为同一个物理设备创建多个逻辑设备。在逻辑设备中，
+需要指定使用的队列族、设备特性和扩展。（在物理设备选取时只是检查，这里需要指定开启）。
+```cpp
+// 1. 获取第一个支持图形渲染和展示画面的队列族
+uint32_t queueIndex = ~0;
+std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
+for (uint32_t qfpIndex = 0; qfpIndex < queueFamilyProperties.size(); qfpIndex++){
+	if ((queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eGraphics) &&
+		physicalDevice.getSurfaceSupportKHR(qfpIndex, *surface))
+	{
+		queueIndex = qfpIndex;
+		break;
+	}
+}
+if (queueIndex == ~0){
+	throw std::runtime_error("Could not find a queue for graphics and present -> terminating");
+}
+
+float queuePriority = 0.5f;
+vk::DeviceQueueCreateInfo = deviceQueueCreateInfo{
+    .queueFamilyIndex = queueIndex,
+    .queueCount = 1,
+    .pQueuePriorities = queuePriority
+};
+
+// 2. 指定要开启的feature
+vk::StructureChain<vk::PhysicalDeviceFeatures2,
+                  vk::PhysicalDeviceVulkan11Features,
+                  vk::PhysicalDeviceVulkan13Features,
+                  vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> featureChain = {
+                        {},
+                        {.shaderDrawParameters = true},
+                        {.synchronization2 = true, .dynamicRendering = true},
+                        {.extendedDynamicState = true}
+                   };
+
+// 3. 指定要开启的扩展
+std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
+
+//通过上面的信息生成DeviceCreateInfo
+vk::DeviceCreateInfo deviceCreateInfo {
+    .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
+    .queueCreateInfoCount = 1,
+    .pQueueCreateInfos = &deviceQueueCreateInfo,
+    .enableExtensionCount = static_cast<uint2_t>(requiredDeviceExtension),
+    .ppEnableExtensionNames = requiredDeviceExtension.data()
+};
+
+// 创建逻辑设备
+vk::raii::Device device = vk::raii::Device(physicalDevice, deviceCreateInfo);
+// 队列也要提取出来
+vk::raii::Queue queue  = vk::raii::Queue(device, queueIndex, 0); // vk::raii::Queue(逻辑设备, 队列族的index, 队列的index)
+
 ```
