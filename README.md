@@ -220,7 +220,7 @@ vk::StructureChain<vk::PhysicalDeviceFeatures2,
                    };
 
 // 3. 指定要开启的扩展
-std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
+std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName }; // 需要使用交换链扩展
 
 //通过上面的信息生成DeviceCreateInfo
 vk::DeviceCreateInfo deviceCreateInfo {
@@ -237,3 +237,22 @@ vk::raii::Device device = vk::raii::Device(physicalDevice, deviceCreateInfo);
 vk::raii::Queue queue  = vk::raii::Queue(device, queueIndex, 0); // vk::raii::Queue(逻辑设备, 队列族的index, 队列的index)
 
 ```
+
+#### 4. 创建表面(surface)
+Vulkan 本身是纯图形/计算 API，不包含任何窗口系统相关的概念（如创建窗口、处理消息循环、管理屏幕输出）。
+为了将渲染结果显示到屏幕上，需要额外的扩展来桥接 Vulkan 与底层操作系统的窗口管理机制。`VkSurfaceKHR`正是这座“桥梁”的核心组件。
+它将不同平台的窗口（Win32、X11、Wayland、macOS/Metal、Android 等）统一成一个 Vulkan 可识别的 `VkSurfaceKHR` 对象。上层代码不需要关心具体是哪个操作系统。
+`VkSwapchainKHR`（交换链）的创建必须指定一个有效的 `VkSurfaceKHR`，交换链生成的图像最终会被呈现到该表面所对应的窗口上。
+
+这里使用glfw创建表面
+```
+VkSurfaceKHR _surface;
+if (glfwCreateWindowSurface(*instance, window, nullptr, &_surface) != 0) {
+	throw std::runtime_error("failed to create window surface!");
+}
+surface = vk::raii::SurfaceKHR(instance, _surface);
+```
+#### 5. 创建交换链(swap chain)
+Vulkan没有“默认framebuffer”的概念，因此在我们将buffer渲染到屏幕可视化之前，需要一个基础设施来存放这个buffer，这个基础设施就是交换链(Swap Chain)。
+
+交换链本质上是一个等待显示到屏幕上的图像队列，我们的应用程序将获取一个图像来绘制它，然后将它返回到队列。交换链可以将图像的呈现与屏幕的刷新率同步。
