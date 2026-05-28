@@ -339,3 +339,34 @@ vk::raii::SwapchainKHR swapChain = k::raii::SwapchainKHR(device, swapChainCreate
 // 保存里面的image
 std::vector<vk::Image> swapChainImages = swapChain.getImages();
 ```
+#### 6. 创建图像视图(image view)
+为了能够在渲染管线总使用交换链`vk::raii::SwapchainKHR`中的图像`vk::Image`，需要为每一个图像创建图像视图`vk::raii::ImageView`。
+它描述了如何访问图像以及访问图像的哪个部分。图像视图接收两个参数：逻辑设备`vk::raii::Device`和视图描述信息`vk::ImageViewCreateInfo`。
+视图描述信息结构如下：
+```cpp
+struct ImageViewCreateInfo{
+    StructureType         sType            = StructureType::eImageViewCreateInfo;
+    void const *          pNext            = {};
+    ImageViewCreateFlags  flags            = {};
+    Image                 image            = {};
+    ImageViewType         viewType         = ImageViewType::e1D; //视图的类型，决定着色器中将图像视为哪种资源(e1D一维纹理,e2D二维纹理,e3D,e1DArray,e2DArray,eCube立方体贴图,eCubeArray)
+    Format                format           = Format::eUndefined; // 视图的像素格式
+    ComponentMapping      components       = {}; // 通道重映射（swizzle）。控制着色器读取纹理时 RGBA 各分量分别来自原始图像的哪个通道，或替换为常数 0/1。默认 components = {} 等价于全 eIdentity（直接映射）。
+    ImageSubresourceRange subresourceRange = {}; // 指定视图可访问的资源范围：- aspectMask：访问哪些方面（颜色、深度、模板、元数据等），- baseMipLevel 和 levelCount：mipmap 层级范围，- baseArrayLayer 和 layerCount：数组层/立方体面范围
+}
+```
+
+最终：
+```cpp
+std::vector<vk::raii::ImageView> swapChainImageViews;
+
+vk::ImageViewCreateInfo imageViewInfo{
+    .viewType = vk::ImageViewType::e2D, // 二维图像
+    .format = surfaceFormat.format, // 使用swapchian设置的图像格式
+    .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 }, // 访问颜色
+};
+for(auto image : swapChainImages){
+    imageViewInfo.image = image;
+    swapChainImageViews.empalce_back(device, imageViewInfo); // 创建图像视图
+}
+```
