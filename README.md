@@ -24,7 +24,7 @@ strcut ApplicationInfo {
 - `enabledLayerCount`,和`ppEnabledLayerNames`用以指示需要使用的层，类型分别是`uint32_t`和`char const * const *`。
 常用的一类层就是验证层（Validation Layers），它可以在不修改程序的情况下，捕获到一些错误：API 使用错误、内存泄漏、同步问题和着色器问题等
 
-总结：
+最终：
 
 ```cpp
 vk::raii::Context context;
@@ -127,7 +127,7 @@ struct QueueFamilyProperties {
 ```
 - 扩展：类似于"1. 创建instance"，一些扩展功能需要物理设备支持。`context`的扩展和物理设备的扩展不同，这里只需要一个扩展`vk::KHRSwapChainExtensionName`，用以将渲染的图像绘制到屏幕上。
 
-总结：
+最终：
 ```cpp
 // 获取所有可用物理设备
 std::vector<vk::raii::PhysicalDevice> physicalDevices = instance.enumeratePhysicalDevices();
@@ -256,3 +256,86 @@ surface = vk::raii::SurfaceKHR(instance, _surface);
 Vulkan没有“默认framebuffer”的概念，因此在我们将buffer渲染到屏幕可视化之前，需要一个基础设施来存放这个buffer，这个基础设施就是交换链(Swap Chain)。
 
 交换链本质上是一个等待显示到屏幕上的图像队列，我们的应用程序将获取一个图像来绘制它，然后将它返回到队列。交换链可以将图像的呈现与屏幕的刷新率同步。
+
+在创建交换链之前，我们需要检查以下三个基本属性：
+- 基础的表面(surface)能力，如交换链支持的最大/最小图片数量、图片尺寸的最大最小值；
+
+```cpp
+auto surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR( *surface );
+// 首先检查图片尺寸，单位是pixel
+//
+if(surfaceCapabilities.currentExtent.width != std::numeric_limits<uint_32>::max()){
+    // 表明交换链有固定尺寸，表面和图片只能使用这个尺寸
+    return surfaceCapabilities.currentExtent;
+}
+// 如果没有固定尺寸，则可以选择最大最小值之间的任意尺寸
+int width, height;
+glfwGetFramebufferSize(window, &width, &height);
+vk::Extent2D surfaceExtent = {
+    std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+    std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
+};
+
+// 设置交换链的图片数量，只设置最小图片数量
+auto minImageCount = std::max(3u, surfaceCapabilities.minImageCount); // 图片数量必须3以上，以保证使用三重缓冲
+if ((0 < surfaceCapabilities.maxImageCount) && (surfaceCapabilities.maxImageCount < minImageCount))
+{
+    // 如果最数量超过了交换链允许的最大值，将最大值设置为图片数量
+    minImageCount = surfaceCapabilities.maxImageCount;
+}
+```
+- 表面格式：像素格式和色彩空间
+```cpp
+std::vector<vk::SurfaceFormatKHR> availableFormats = physicalDevice.getSurfaceFormatsKHR( surface ); // 获取表面支持的格式
+const auto formatIt = std::ranges::find_if(
+    availableFormats, [](const auto& format){
+        return format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonLinear;
+    }
+);
+vk::SurfaceFormatKHR surfaceFormat = formatIt != availabelFormats.end() ? *formatIt : availableFprmats[0]; // 如果没有满足条件的就选择第一个
+```
+`vk::Format::eB8G8R8A8Srgb`表示使用BGRA顺序存储色彩，每个通道的大小为8bit，一个像素32bit。
+- 可用的展示模式
+
+展示模式有以下几种：
+1. `vk::PresentModeKHR::eImmediate`：应用程序提交的图像会立即被发送到显示控制器，而不等待垂直空白（Vertical Blank，VBlank）信号。显示扫描输出时，如果内存中的图像恰好被换出，就会出现撕裂。
+2. `vk::PresentModeKHR::eFifo`：交换链内部维护一个队列（通常是双缓冲或三缓冲）。显示设备在每次垂直空白时，从队列前端取走一张图像显示。应用程序将渲染完成的图像推入队列后端。
+若队列已满（所有图像都被占用），应用程序的`vkQueuePresentKHR`会阻塞，直到队列空出位置。
+3. `vk::PresentModeKHR::eFifoRelaxed`：基本逻辑与 FIFO 相同，但有一个例外：如果队列在上一次垂直空白时为空（即应用程序来不及渲染新帧，导致显示器重复显示旧图像），
+那么当新图像最终到达时，不等待下一个 VBlank，而是立即提交。这会导致部分撕裂（只有这一帧可能撕裂，后续恢复正常）。
+4. `vk::PresentModeKHR::eMailbox`：交换链维护一个固定容量的队列（通常是三个缓冲区）。当队列已满时，新提交的图像不会阻塞，而是替换掉队列中最旧的一个待显示图像。
+显示设备始终从队列中取走最新的图像进行显示。
+
+**eFifo模式是保证可用的**
+
+```cpp
+std::vector<vk::PresentModeKHR> availablePresentModes = physicalDevice.getSurfacePresentModesKHR( surface );
+vk::PresentModeKHR presentMode = 
+    std::ranges::any_of(
+        availablePresentModes, [](const vk::PresentModeKHR value){
+            return vk::PresentModeKHR::eMailBox == value;
+        }
+    ) ? vk::PresentModeKHR::eMailBox : vk::PresentModeKHR::eFifo; // 首选eMailBox，没有就使用eFifo
+```
+
+最终：
+```cpp
+vk::SwapchainCreateInfoKHR swapChainCreateInfo{
+    .surface = *surface,
+    .minImageCount = minImageCount, // 图片数量
+    .imageFormat = surfaceFormat.format, // 图片格式brga
+    .imageColorSpace = surfaceFormat.colorSpace, // 色彩空间
+    .imageExtent = surfaceExtent, // 图片尺寸
+    .imageArrayLayers = 1, // 每个图像包含的层数，
+    .imageUsage = vk::ImageUsageFlagBits::eColorAttachment, // 将图像作为颜色附件使用
+    .imageSharingMode = vk::SharingMode::eExclusive, // 图片可能被多个队列族使用情况下怎么处理，eExclusive表示图片只能属于一个queueFamily，所有权必须显示的转移。
+    .preTransform = surfaceCapabilities.currentTransform, // 图像变换操作，如旋转、水平翻转等
+    .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque, // 是否使用alpha通道来与其他window进行混合
+    .presentMode = presentMode, // 展示模式
+    .clipped = true // true表示不关心被遮蔽的像素
+}
+// 创建swapchain
+vk::raii::SwapchainKHR swapChain = k::raii::SwapchainKHR(device, swapChainCreateInfo);
+// 保存里面的image
+std::vector<vk::Image> swapChainImages = swapChain.getImages();
+```
