@@ -370,3 +370,67 @@ for(auto image : swapChainImages){
     swapChainImageViews.empalce_back(device, imageViewInfo); // 创建图像视图
 }
 ```
+### 7. 一个简单的shader
+Vulkan的shader使用`slang`进行编写，并需要将他转换为`spirv`格式才能被Vulkan使用。下面是一个简单的shader。
+```slang
+static float2 positions[3] = float2[](
+    float2(0.0, -0.5),
+    float2(0.5, 0.5),
+    float2(-0.5, 0.5)
+);
+
+static float3 colors[3] = float3[](
+    float3(1.0, 0.0, 0.0),
+    float3(0.0, 1.0, 0.0),
+    float3(0.0, 0.0, 1.0)
+);
+
+struct VertexOutput {
+    float3 color;
+    float4 sv_position : SV_Position; // 这里标记该值为系统值，用于在图形管线中传递屏幕空间位置信息。
+};
+
+[shader("vertex")]
+VertexOutput vertMain(uint vid: SV_VertexID){
+    VertexOutput output;
+    output.sv_position = float4(positions[vid], 0.0, 1.0);
+    output.color = colors[vid];
+    return output;
+}
+
+[shader("fragment")]
+float4 fragMain(VertexOutput inVert) : SV_Target {
+    float3 color = inVert.color;
+    return float4(color, 1.0);
+}
+```
+随后，使用slangc将其编译为spir-v;
+```
+C:/VulkanSDK/x.x.x.x/bin/slangc.exe shader.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o slang.spv
+```
+读取spirv文件并创建shader module
+```cpp
+std::vector<char> readFile(const std::string &filename){
+    std::ifstream file(filename, std::ios::ate | std::ios::binary); // 二进制打开，并定位到文件末尾
+    if(!file.is_open()){
+        throw std::runtime_error("failed to open file: " + filename);
+    }
+    std::vector<char> buffer(file.tellg()); // 获取当前位置作为buffer大小，由于开始定位到末尾，所以大小为文件的字节数
+    file.seekg(0, std::ios::beg);
+    file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+    file.close();
+    return buffer;
+}
+
+[[nodiscard]] vk::raii::ShaderModule createShaderModule(const std::vector<char> &code)
+{
+	vk::ShaderModuleCreateInfo createInfo{.codeSize = code.size() * sizeof(char), .pCode = reinterpret_cast<const uint32_t *>(code.data())};
+	vk::raii::ShaderModule     shaderModule{device, createInfo};
+
+	return shaderModule;
+}
+
+vk::raii::ShaderModule shaderModule = createShaderModule(readFile("slang.spv"));
+```
+### 8. 创建图形管线
+
