@@ -4,7 +4,7 @@
 struct GLFWwindow;
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
-
+constexpr int MAX_FRAMES_IN_FLIGHT = 2; // 并行渲染数
 
 #ifdef NDEBUG
 constexpr bool enableValidationLayers = false;
@@ -36,10 +36,11 @@ public:
 	vk::raii::PipelineLayout pipelineLayout = nullptr;
 	vk::raii::Pipeline graphicPipeline = nullptr;
 	vk::raii::CommandPool commandPool = nullptr;
-	vk::raii::CommandBuffer commandBuffer = nullptr;
-	vk::raii::Semaphore presentCompleteSemaphore = nullptr;
-	vk::raii::Semaphore renderFinishedSemaphore = nullptr;
-	vk::raii::Fence drawFence = nullptr;
+	std::vector<vk::raii::CommandBuffer> commandBuffers;
+	std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
+	std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
+	std::vector<vk::raii::Fence> drawFences;
+	uint32_t frameIndex = 0;
 	HelloTriangleApplication();
 	~HelloTriangleApplication();
 	void run();
