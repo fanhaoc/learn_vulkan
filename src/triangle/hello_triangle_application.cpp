@@ -549,9 +549,22 @@ void HelloTriangleApplication::drawFrame() {
 }
 
 void HelloTriangleApplication::cleanup() {
-	glfwDestroyWindow(window);
 
+	cleanupSwapChain();
+	glfwDestroyWindow(window);
 	glfwTerminate();
+}
+
+void HelloTriangleApplication::recreateSwapChain() {
+	device.waitIdle();
+	cleanupSwapChain();
+	createSwapChain();
+	createImageViews();
+}
+
+void HelloTriangleApplication::cleanupSwapChain() {
+	swapChainImageViews.clear();
+	swapChain = nullptr;
 }
 
 VKAPI_ATTR vk::Bool32 VKAPI_CALL HelloTriangleApplication::debugCallback(
