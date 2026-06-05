@@ -1,5 +1,7 @@
 #include "triangle/hello_triangle_application.h"
 #include "helper.cpp"
+#include "data.cpp"
+
 #define GLFW_INCLUDE_VULKAN
 #include<GLFW/glfw3.h>
 #include <iostream>
@@ -7,6 +9,8 @@
 #include <cstdint> // Necessary for uint32_t
 #include <limits> // Necessary for std::numeric_limits
 #include <algorithm> // Necessary for std::clamp
+
+
 
 
 HelloTriangleApplication::HelloTriangleApplication() {
@@ -46,6 +50,7 @@ void HelloTriangleApplication::initVulkan() {
 	createImageViews();
 	createGraphicsPipeline();
 	createCommandPool();
+	createVertexBuffer();
 	createCommandBuffer();
 	createSyncObjects();
 }
@@ -312,7 +317,15 @@ void HelloTriangleApplication::createGraphicsPipeline() {
 	};
 	vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-	vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+
+	auto bindingDescription = Vertex::getBindingDescription();
+	auto attributeDescriptions = Vertex::getAttributeDescriptions();
+	vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
+		.vertexBindingDescriptionCount = 1,
+		.pVertexBindingDescriptions = &bindingDescription,
+		.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size()),
+		.pVertexAttributeDescriptions = attributeDescriptions.data()
+	};
 
 	vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
 		.topology = vk::PrimitiveTopology::eTriangleList
@@ -404,6 +417,39 @@ void HelloTriangleApplication::createCommandPool() {
 	commandPool = vk::raii::CommandPool(device, poolInfo);
 }
 
+void HelloTriangleApplication::createVertexBuffer() {
+	vk::BufferCreateInfo bufferInfo{
+		.size = sizeof(vertices[0]) * vertices.size(),
+		.usage = vk::BufferUsageFlagBits::eVertexBuffer,
+		.sharingMode = vk::SharingMode::eExclusive
+	};
+	vertexBuffer = vk::raii::Buffer(device, bufferInfo);
+	// 申请内存
+	vk::MemoryRequirements memRequirements = vertexBuffer.getMemoryRequirements();
+	vk::MemoryAllocateInfo memAllocateInfo{
+		.allocationSize = memRequirements.size,
+		.memoryTypeIndex = findMemorytype(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)
+	};
+	vertexBufferMemory = vk::raii::DeviceMemory(device, memAllocateInfo);
+	// 绑定buffer和内存
+	vertexBuffer.bindMemory(*vertexBufferMemory, 0);
+	// 将数据放到buffer中
+	void* data = vertexBufferMemory.mapMemory(0, bufferInfo.size);
+	memcpy(data, vertices.data(), bufferInfo.size);
+	vertexBufferMemory.unmapMemory();
+}
+
+uint32_t HelloTriangleApplication::findMemorytype(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
+	vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
+	for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+		// 内存类型和内存属性都满足要求，这两个都是用位来标识
+		if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+			return i;
+		}
+	}
+	throw std::runtime_error("failed to find suitable memory type!");
+}
+
 void HelloTriangleApplication::createCommandBuffer() {
 	vk::CommandBufferAllocateInfo allocInfo{
 		.commandPool = commandPool,
@@ -423,6 +469,8 @@ void HelloTriangleApplication::createSyncObjects() {
 		drawFences.emplace_back(device, vk::FenceCreateInfo{ .flags = vk::FenceCreateFlagBits::eSignaled });
 	}
 }
+
+
 
 void HelloTriangleApplication::recordCommandBuffer(uint32_t imageIndex) {
 	commandBuffers[frameIndex].begin({});
@@ -454,6 +502,7 @@ void HelloTriangleApplication::recordCommandBuffer(uint32_t imageIndex) {
 
 	commandBuffers[frameIndex].beginRendering(renderingInfo);
 	commandBuffers[frameIndex].bindPipeline(vk::PipelineBindPoint::eGraphics, graphicPipeline);
+	commandBuffers[frameIndex].bindVertexBuffers(0, *vertexBuffer, {0}); // 第一个参数是bindding位置，对应vertex中的bind0，第三个是偏移量
 	commandBuffers[frameIndex].setViewport(
 		0, vk::Viewport(
 			0.0f, 0.0f,
@@ -462,7 +511,7 @@ void HelloTriangleApplication::recordCommandBuffer(uint32_t imageIndex) {
 		)
 	);
 	commandBuffers[frameIndex].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
-	commandBuffers[frameIndex].draw(3, 1, 0, 0);
+	commandBuffers[frameIndex].draw(static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 	commandBuffers[frameIndex].endRendering();
 
 	transition_image_layout(
