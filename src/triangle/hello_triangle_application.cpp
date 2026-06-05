@@ -30,9 +30,10 @@ void HelloTriangleApplication::initWindow() {
 	glfwInit();
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 	window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+	glfwSetWindowUserPointer(window, this); // this指针存储在GLFW窗口的用户指针中，以便在回调函数中访问HelloTriangleApplication实例
+	glfwSetFramebufferSizeCallback(window, HelloTriangleApplication::framebufferResizeCallback);
 }
 
 void HelloTriangleApplication::initVulkan() {
@@ -218,7 +219,7 @@ void HelloTriangleApplication::createSurface() {
 vk::SurfaceFormatKHR HelloTriangleApplication::chooseSwapSurfaceFormat(std::vector<vk::SurfaceFormatKHR> const& availableFormats) {
 	auto const formatIt = std::ranges::find_if(
 		availableFormats, [](auto const& format) {
-			return format.format == vk::Format::eB8G8R8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
+			return format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
 		}
 	);
 	return formatIt != availableFormats.end() ? *formatIt : availableFormats[0];
@@ -524,8 +525,20 @@ void HelloTriangleApplication::drawFrame() {
 	{
 		throw std::runtime_error("failed to wait for fence!");
 	}
-	device.resetFences(*drawFences[frameIndex]);
+	
 	auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[frameIndex], nullptr);
+	// 判断是否需要更换swapchain（窗口被最小化或者被其他窗口覆盖时会发生这种情况）
+	if(result == vk::Result::eErrorOutOfDateKHR){
+		frameBufferResized = false;
+		recreateSwapChain();
+		return;
+	}
+	if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
+	{
+		assert(result == vk::Result::eTimeout || result == vk::Result::eNotReady);
+		throw std::runtime_error("failed to acquire swap chain image!-----------");
+	}
+	device.resetFences(*drawFences[frameIndex]);
 	commandBuffers[frameIndex].reset();
 	recordCommandBuffer(imageIndex);
 	vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -535,16 +548,24 @@ void HelloTriangleApplication::drawFrame() {
 									  .commandBufferCount = 1,
 									  .pCommandBuffers = &*commandBuffers[frameIndex],
 									  .signalSemaphoreCount = 1,
-									  .pSignalSemaphores = &*renderFinishedSemaphores[frameIndex]};
+									  .pSignalSemaphores = &*renderFinishedSemaphores[imageIndex]};
 	graphicsQueue.submit(submitInfo, *drawFences[frameIndex]);
 	const vk::PresentInfoKHR presentInfoKHR{
 		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = &*renderFinishedSemaphores[frameIndex],
+		.pWaitSemaphores = &*renderFinishedSemaphores[imageIndex],
 		.swapchainCount = 1,
 		.pSwapchains = &*swapChain,
 		.pImageIndices = &imageIndex
 	};
-	result = graphicsQueue.presentKHR(presentInfoKHR);
+	result = graphicsQueue.presentKHR(presentInfoKHR); 
+	// swapchain不适用时，这里也会抛出异常
+	if ((result == vk::Result::eSuboptimalKHR) || (result == vk::Result::eErrorOutOfDateKHR) || frameBufferResized) {
+		frameBufferResized = false;
+		recreateSwapChain();
+	}
+	else {
+		assert(result == vk::Result::eSuccess);
+	}
 	frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
@@ -556,7 +577,16 @@ void HelloTriangleApplication::cleanup() {
 }
 
 void HelloTriangleApplication::recreateSwapChain() {
+	int width = 0, height = 0;
+	glfwGetFramebufferSize(window, &width, &height);
+	// 当窗口被最小化时，framebuffer的宽高会变成0，这时需要等待窗口被恢复后再继续
+	while (width == 0 || height == 0)
+	{
+		glfwGetFramebufferSize(window, &width, &height);
+		glfwWaitEvents();
+	}
 	device.waitIdle();
+
 	cleanupSwapChain();
 	createSwapChain();
 	createImageViews();
@@ -576,4 +606,11 @@ VKAPI_ATTR vk::Bool32 VKAPI_CALL HelloTriangleApplication::debugCallback(
 	}
 
 	return vk::False;
+}
+
+
+
+void HelloTriangleApplication::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+	auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+	app->frameBufferResized = true;
 }

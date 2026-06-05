@@ -1,4 +1,5 @@
 #pragma once
+#define VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS // 这个保证了当交换链过期时，vk::Result::eErrorOutOfDate会被当做成功处理，不然会直接抛出异常。
 #include<vulkan/vulkan_raii.hpp>
 
 struct GLFWwindow;
@@ -41,6 +42,7 @@ public:
 	std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
 	std::vector<vk::raii::Fence> drawFences;
 	uint32_t frameIndex = 0;
+	bool frameBufferResized = false;
 	HelloTriangleApplication();
 	~HelloTriangleApplication();
 	void run();
@@ -82,4 +84,5 @@ private:
 	static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
 		vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*
 	);
+	static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 };
