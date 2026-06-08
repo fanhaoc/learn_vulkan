@@ -418,25 +418,56 @@ void HelloTriangleApplication::createCommandPool() {
 }
 
 void HelloTriangleApplication::createVertexBuffer() {
+	vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+	
+	// 获取cpu可访问的buffer，用以临时存储数据
+	auto [stagingBuffer, stagingDeviceMemory] = createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
+	// 将数据放到buffer中
+	void* dataStaging = stagingDeviceMemory.mapMemory(0, bufferSize);
+	memcpy(dataStaging, vertices.data(), bufferSize);
+	stagingDeviceMemory.unmapMemory();
+
+	// 获取gpu专用buffer
+	std::tie(vertexBuffer, vertexBufferMemory) = 
+		createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+	copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+}
+
+std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> HelloTriangleApplication::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties) {
+
 	vk::BufferCreateInfo bufferInfo{
-		.size = sizeof(vertices[0]) * vertices.size(),
-		.usage = vk::BufferUsageFlagBits::eVertexBuffer,
+		.size = size,
+		.usage = usage,
 		.sharingMode = vk::SharingMode::eExclusive
 	};
-	vertexBuffer = vk::raii::Buffer(device, bufferInfo);
+	vk::raii::Buffer buffer = vk::raii::Buffer(device, bufferInfo);
 	// 申请内存
-	vk::MemoryRequirements memRequirements = vertexBuffer.getMemoryRequirements();
-	vk::MemoryAllocateInfo memAllocateInfo{
+	vk::MemoryRequirements memRequirements = buffer.getMemoryRequirements();
+	vk::MemoryAllocateInfo memAllocInfo{
 		.allocationSize = memRequirements.size,
-		.memoryTypeIndex = findMemorytype(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)
+		.memoryTypeIndex = findMemorytype(memRequirements.memoryTypeBits, properties)
 	};
-	vertexBufferMemory = vk::raii::DeviceMemory(device, memAllocateInfo);
+	vk::raii::DeviceMemory buffferMemory = vk::raii::DeviceMemory(device, memAllocInfo);
 	// 绑定buffer和内存
-	vertexBuffer.bindMemory(*vertexBufferMemory, 0);
-	// 将数据放到buffer中
-	void* data = vertexBufferMemory.mapMemory(0, bufferInfo.size);
-	memcpy(data, vertices.data(), bufferInfo.size);
-	vertexBufferMemory.unmapMemory();
+	buffer.bindMemory(*buffferMemory, 0);
+	return { std::move(buffer), std::move(buffferMemory) };
+}
+
+void HelloTriangleApplication::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size){
+	vk::CommandBufferAllocateInfo allocInfo{
+		.commandPool = commandPool,
+		.level = vk::CommandBufferLevel::ePrimary,
+		.commandBufferCount = 1
+	};
+	vk::raii::CommandBuffer commandCopyBuffer = std::move(device.allocateCommandBuffers(allocInfo).front());
+	// 记录命令
+	commandCopyBuffer.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+	commandCopyBuffer.copyBuffer(*srcBuffer, *dstBuffer, vk::BufferCopy(0, 0, size));
+	commandCopyBuffer.end();
+	// 执行命令
+	graphicsQueue.submit(vk::SubmitInfo{ .commandBufferCount = 1, .pCommandBuffers = &*commandCopyBuffer }, nullptr);
+	graphicsQueue.waitIdle();
 }
 
 uint32_t HelloTriangleApplication::findMemorytype(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {

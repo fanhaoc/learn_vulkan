@@ -66,6 +66,8 @@ private:
 	void createGraphicsPipeline();
 	void createCommandPool();
 	void createVertexBuffer();
+	std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
+	void copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size);
 	uint32_t findMemorytype(uint32_t typeFilter, vk::MemoryPropertyFlags properties); // typefilter表示允许使用哪些内存类型
 	void createCommandBuffer();
 	void createSyncObjects();
