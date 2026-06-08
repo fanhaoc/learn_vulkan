@@ -51,6 +51,7 @@ void HelloTriangleApplication::initVulkan() {
 	createGraphicsPipeline();
 	createCommandPool();
 	createVertexBuffer();
+	createIndexBuffer();
 	createCommandBuffer();
 	createSyncObjects();
 }
@@ -434,6 +435,20 @@ void HelloTriangleApplication::createVertexBuffer() {
 	copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 }
 
+void HelloTriangleApplication::createIndexBuffer() {
+	vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+	auto [stagingBuffer, stagingBufferMemory] = 
+		createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+	void* data = stagingBufferMemory.mapMemory(0, bufferSize);
+	memcpy(data, indices.data(), bufferSize);
+	stagingBufferMemory.unmapMemory();
+
+	std::tie(indexBuffer, indexBufferMemory) =
+		createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+}
+
 std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> HelloTriangleApplication::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties) {
 
 	vk::BufferCreateInfo bufferInfo{
@@ -534,6 +549,7 @@ void HelloTriangleApplication::recordCommandBuffer(uint32_t imageIndex) {
 	commandBuffers[frameIndex].beginRendering(renderingInfo);
 	commandBuffers[frameIndex].bindPipeline(vk::PipelineBindPoint::eGraphics, graphicPipeline);
 	commandBuffers[frameIndex].bindVertexBuffers(0, *vertexBuffer, {0}); // 第一个参数是bindding位置，对应vertex中的bind0，第三个是偏移量
+	commandBuffers[frameIndex].bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint16);
 	commandBuffers[frameIndex].setViewport(
 		0, vk::Viewport(
 			0.0f, 0.0f,
@@ -542,7 +558,8 @@ void HelloTriangleApplication::recordCommandBuffer(uint32_t imageIndex) {
 		)
 	);
 	commandBuffers[frameIndex].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
-	commandBuffers[frameIndex].draw(static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+	//commandBuffers[frameIndex].draw(static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+	commandBuffers[frameIndex].drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 	commandBuffers[frameIndex].endRendering();
 
 	transition_image_layout(

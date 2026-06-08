@@ -39,6 +39,8 @@ public:
 	vk::raii::CommandPool commandPool = nullptr;
 	vk::raii::Buffer vertexBuffer = nullptr;
 	vk::raii::DeviceMemory vertexBufferMemory = nullptr; // 这是为vertexbuffer申请到的内存
+	vk::raii::Buffer indexBuffer = nullptr;
+	vk::raii::DeviceMemory indexBufferMemory = nullptr; // 这是为vertexbuffer申请到的内存
 	std::vector<vk::raii::CommandBuffer> commandBuffers;
 	std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
 	std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
@@ -66,6 +68,7 @@ private:
 	void createGraphicsPipeline();
 	void createCommandPool();
 	void createVertexBuffer();
+	void createIndexBuffer();
 	std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
 	void copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size);
 	uint32_t findMemorytype(uint32_t typeFilter, vk::MemoryPropertyFlags properties); // typefilter表示允许使用哪些内存类型
