@@ -1,8 +1,10 @@
 #include <fstream>
+#include <iostream>
 #include <vulkan/vulkan_raii.hpp>
 
 std::vector<char> readShaderFile(const std::string& fileName) {
     std::ifstream file(fileName, std::ios::ate | std::ios::binary);
+    std::cout<<fileName<<std::endl;
     if (!file.is_open()) {
         throw std::runtime_error("failed to open file!");
     }
