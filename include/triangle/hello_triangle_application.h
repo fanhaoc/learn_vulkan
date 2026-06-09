@@ -34,13 +34,19 @@ public:
 	std::vector<vk::raii::ImageView> swapChainImageViews;
 	vk::SurfaceFormatKHR swapChainSurfaceFormat;
 	vk::Extent2D swapChainExtent;
+	vk::raii::DescriptorSetLayout descriptorSetLayout = nullptr;
 	vk::raii::PipelineLayout pipelineLayout = nullptr;
 	vk::raii::Pipeline graphicPipeline = nullptr;
 	vk::raii::CommandPool commandPool = nullptr;
 	vk::raii::Buffer vertexBuffer = nullptr;
 	vk::raii::DeviceMemory vertexBufferMemory = nullptr; // 这是为vertexbuffer申请到的内存
 	vk::raii::Buffer indexBuffer = nullptr;
-	vk::raii::DeviceMemory indexBufferMemory = nullptr; // 这是为vertexbuffer申请到的内存
+	vk::raii::DeviceMemory indexBufferMemory = nullptr; 
+	std::vector<vk::raii::Buffer> uniformBuffers; // 需要为每一个commandbuffer都创建一个uniformbuffer
+	std::vector<vk::raii::DeviceMemory> uniformBuffersMemory;
+	std::vector<void*> uniformBuffersMapped; // 这个是为了把uniformbuffer的内存映射到cpu上，方便更新数据
+	vk::raii::DescriptorPool descriptorPool = nullptr;
+	std::vector<vk::raii::DescriptorSet> descriptorSets;
 	std::vector<vk::raii::CommandBuffer> commandBuffers;
 	std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
 	std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
@@ -65,10 +71,14 @@ private:
 	uint32_t chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities);
 	void createSwapChain();
 	void createImageViews();
+	void createDescriptorSetLayout();
 	void createGraphicsPipeline();
 	void createCommandPool();
 	void createVertexBuffer();
 	void createIndexBuffer();
+	void createUniformBuffers();
+	void createDescriptorPool();
+	void createDecriptorSets();
 	std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
 	void copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size);
 	uint32_t findMemorytype(uint32_t typeFilter, vk::MemoryPropertyFlags properties); // typefilter表示允许使用哪些内存类型
@@ -86,6 +96,7 @@ private:
 	
 	void mainLoop();
 	void drawFrame();
+	void updateUniformBuffer(uint32_t currentImage);
 	void cleanup();
 	void recreateSwapChain();
 	void cleanupSwapChain();

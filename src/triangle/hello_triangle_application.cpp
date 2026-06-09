@@ -9,7 +9,9 @@
 #include <cstdint> // Necessary for uint32_t
 #include <limits> // Necessary for std::numeric_limits
 #include <algorithm> // Necessary for std::clamp
-
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <chrono>
 
 
 
@@ -48,10 +50,14 @@ void HelloTriangleApplication::initVulkan() {
 	createLogicalDevice();
 	createSwapChain();
 	createImageViews();
+	createDescriptorSetLayout();
 	createGraphicsPipeline();
 	createCommandPool();
 	createVertexBuffer();
 	createIndexBuffer();
+	createUniformBuffers();
+	createDescriptorPool();
+	createDecriptorSets();
 	createCommandBuffer();
 	createSyncObjects();
 }
@@ -302,6 +308,20 @@ void HelloTriangleApplication::createImageViews() {
 	}
 }
 
+void HelloTriangleApplication::createDescriptorSetLayout() {
+	vk::DescriptorSetLayoutBinding uboLayoutBinding{
+		.binding = 0,
+		.descriptorType = vk::DescriptorType::eUniformBuffer,
+		.descriptorCount = 1,
+		.stageFlags = vk::ShaderStageFlagBits::eVertex
+	};
+	vk::DescriptorSetLayoutCreateInfo layoutInfo{
+		.bindingCount = 1,
+		.pBindings = &uboLayoutBinding
+	};
+	descriptorSetLayout = vk::raii::DescriptorSetLayout(device, layoutInfo);
+}
+
 void HelloTriangleApplication::createGraphicsPipeline() {
 	auto shaderCode = readShaderFile("shaders/slang.spv");
 	std::cout << "shaderSize:" << shaderCode.size() << std::endl;
@@ -356,7 +376,7 @@ void HelloTriangleApplication::createGraphicsPipeline() {
 		.rasterizerDiscardEnable = vk::False,
 		.polygonMode = vk::PolygonMode::eFill,
 		.cullMode = vk::CullModeFlagBits::eBack,
-		.frontFace = vk::FrontFace::eClockwise,
+		.frontFace = vk::FrontFace::eCounterClockwise,
 		.depthBiasEnable = vk::False,
 		.lineWidth = 1.0f
 	};
@@ -378,8 +398,9 @@ void HelloTriangleApplication::createGraphicsPipeline() {
 	};
 
 	vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
-		.setLayoutCount = 0,
-		.pushConstantRangeCount = 0
+		.setLayoutCount = 1,
+		.pSetLayouts = &*descriptorSetLayout,
+		.pushConstantRangeCount = 0,
 	};
 	pipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
 
@@ -449,6 +470,57 @@ void HelloTriangleApplication::createIndexBuffer() {
 	copyBuffer(stagingBuffer, indexBuffer, bufferSize);
 }
 
+void HelloTriangleApplication::createUniformBuffers() {
+	for(size_t i=0; i<MAX_FRAMES_IN_FLIGHT; i++){
+		vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+		auto [buffer, bufferMem] = 
+			createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		uniformBuffers.emplace_back(std::move(buffer));
+		uniformBuffersMemory.emplace_back(std::move(bufferMem));
+		uniformBuffersMapped.emplace_back(uniformBuffersMemory.back().mapMemory(0, bufferSize));
+	}
+}
+
+void HelloTriangleApplication::createDescriptorPool() {
+	vk::DescriptorPoolSize poolSize{
+		.type = vk::DescriptorType::eUniformBuffer,
+		.descriptorCount = MAX_FRAMES_IN_FLIGHT
+	};
+	vk::DescriptorPoolCreateInfo poolInfo{
+		.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+		.maxSets = MAX_FRAMES_IN_FLIGHT,
+		.poolSizeCount = 1,
+		.pPoolSizes = &poolSize
+	};
+	descriptorPool = vk::raii::DescriptorPool(device, poolInfo);
+}
+
+void HelloTriangleApplication::createDecriptorSets() {
+	std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *descriptorSetLayout);
+	vk::DescriptorSetAllocateInfo allocInfo{
+		.descriptorPool = *descriptorPool,
+		.descriptorSetCount = static_cast<uint32_t>(layouts.size()),
+		.pSetLayouts = layouts.data()
+	};
+	descriptorSets = device.allocateDescriptorSets(allocInfo);
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+		vk::DescriptorBufferInfo bufferInfo{
+			.buffer = uniformBuffers[i],
+			.offset = 0,
+			.range = sizeof(UniformBufferObject)
+		};
+		vk::WriteDescriptorSet descriptorWrite{
+			.dstSet = descriptorSets[i],
+			.dstBinding = 0,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = vk::DescriptorType::eUniformBuffer,
+			.pBufferInfo = &bufferInfo
+		};
+		device.updateDescriptorSets(descriptorWrite, {});
+	}
+}
+
 std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> HelloTriangleApplication::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties) {
 
 	vk::BufferCreateInfo bufferInfo{
@@ -516,8 +588,6 @@ void HelloTriangleApplication::createSyncObjects() {
 	}
 }
 
-
-
 void HelloTriangleApplication::recordCommandBuffer(uint32_t imageIndex) {
 	commandBuffers[frameIndex].begin({});
 
@@ -550,6 +620,7 @@ void HelloTriangleApplication::recordCommandBuffer(uint32_t imageIndex) {
 	commandBuffers[frameIndex].bindPipeline(vk::PipelineBindPoint::eGraphics, graphicPipeline);
 	commandBuffers[frameIndex].bindVertexBuffers(0, *vertexBuffer, {0}); // 第一个参数是bindding位置，对应vertex中的bind0，第三个是偏移量
 	commandBuffers[frameIndex].bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint16);
+	
 	commandBuffers[frameIndex].setViewport(
 		0, vk::Viewport(
 			0.0f, 0.0f,
@@ -558,6 +629,7 @@ void HelloTriangleApplication::recordCommandBuffer(uint32_t imageIndex) {
 		)
 	);
 	commandBuffers[frameIndex].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
+	commandBuffers[frameIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptorSets[frameIndex], nullptr);
 	//commandBuffers[frameIndex].draw(static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 	commandBuffers[frameIndex].drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 	commandBuffers[frameIndex].endRendering();
@@ -637,6 +709,7 @@ void HelloTriangleApplication::drawFrame() {
 	}
 	device.resetFences(*drawFences[frameIndex]);
 	commandBuffers[frameIndex].reset();
+	updateUniformBuffer(frameIndex);
 	recordCommandBuffer(imageIndex);
 	vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 	const vk::SubmitInfo   submitInfo{ .waitSemaphoreCount = 1,
@@ -664,6 +737,20 @@ void HelloTriangleApplication::drawFrame() {
 		assert(result == vk::Result::eSuccess);
 	}
 	frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
+void HelloTriangleApplication::updateUniformBuffer(uint32_t currentImage){
+	static auto startTime = std::chrono::high_resolution_clock::now();
+
+	auto currentTime = std::chrono::high_resolution_clock::now();
+	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+	UniformBufferObject ubo{};
+	ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
+	ubo.proj[1][1] *= -1; // glm的坐标系和Vulkan的坐标系y轴方向相反，所以需要将proj矩阵的y轴缩放-1
+	memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
 
 void HelloTriangleApplication::cleanup() {
