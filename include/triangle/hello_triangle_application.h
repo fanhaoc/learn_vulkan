@@ -38,6 +38,8 @@ public:
 	vk::raii::PipelineLayout pipelineLayout = nullptr;
 	vk::raii::Pipeline graphicPipeline = nullptr;
 	vk::raii::CommandPool commandPool = nullptr;
+	vk::raii::Image textureImage = nullptr;
+	vk::raii::DeviceMemory textureImageMemory = nullptr;
 	vk::raii::Buffer vertexBuffer = nullptr;
 	vk::raii::DeviceMemory vertexBufferMemory = nullptr; // 这是为vertexbuffer申请到的内存
 	vk::raii::Buffer indexBuffer = nullptr;
@@ -74,6 +76,7 @@ private:
 	void createDescriptorSetLayout();
 	void createGraphicsPipeline();
 	void createCommandPool();
+	void createTextureImage();
 	void createVertexBuffer();
 	void createIndexBuffer();
 	void createUniformBuffers();
@@ -100,6 +103,8 @@ private:
 	void cleanup();
 	void recreateSwapChain();
 	void cleanupSwapChain();
+
+	
 
 	static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
 		vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*

@@ -1,6 +1,8 @@
 #include "triangle/hello_triangle_application.h"
 #include "helper.cpp"
 #include "data.cpp"
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 #define GLFW_INCLUDE_VULKAN
 #include<GLFW/glfw3.h>
@@ -12,6 +14,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
+
 
 
 
@@ -439,6 +442,24 @@ void HelloTriangleApplication::createCommandPool() {
 	commandPool = vk::raii::CommandPool(device, poolInfo);
 }
 
+void HelloTriangleApplication::createTextureImage() {
+	int texWidth, texHeight, texChannels;
+	stbi_uc* pixels = stbi_load("public/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+	VkDeviceSize imageSize = texWidth * texHeight * 4;
+	if (!pixels) {
+		throw std::runtime_error("failed to load texture image!");
+	}
+	auto [staginBuffer, stagingBufferMemory] = createBuffer(
+		imageSize,
+		vk::BufferUsageFlagBits::eTransferSrc,
+		vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+	);
+	void* data = stagingBufferMemory.mapMemory(0, imageSize);
+	memcpy(data, pixels, imageSize);
+	stagingBufferMemory.unmapMemory();
+	stbi_image_free(pixels);
+}
+
 void HelloTriangleApplication::createVertexBuffer() {
 	vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 	
@@ -781,6 +802,9 @@ void HelloTriangleApplication::cleanupSwapChain() {
 	swapChain = nullptr;
 }
 
+
+
+
 VKAPI_ATTR vk::Bool32 VKAPI_CALL HelloTriangleApplication::debugCallback(
 	vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*
 ){
@@ -798,3 +822,4 @@ void HelloTriangleApplication::framebufferResizeCallback(GLFWwindow* window, int
 	auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
 	app->frameBufferResized = true;
 }
+
