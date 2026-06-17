@@ -1,0 +1,22 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 10,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "learn_vulkan_presets",
+            "displayName": "debug build presets",
+            "generator": "Visual Studio 18 2026",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "-Wall -Wextra",
+                "CMAKE_TOOLCHAIN_FILE": "$penv{VCPKG_HOME}/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_TARGET_TRIPLET": "x64-windows",
+                "ARCHITECTURE": "x64"
+            }
+        }
+    ]
+}

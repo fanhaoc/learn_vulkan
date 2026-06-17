@@ -326,7 +326,7 @@ void HelloTriangleApplication::createDescriptorSetLayout() {
 }
 
 void HelloTriangleApplication::createGraphicsPipeline() {
-	auto shaderCode = readShaderFile("shaders/slang.spv");
+	auto shaderCode = readShaderFile("./shaders/slang.spv");
 	std::cout << "shaderSize:" << shaderCode.size() << std::endl;
 	vk::raii::ShaderModule shaderModule = createShaderModule(shaderCode, device);
 	vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
