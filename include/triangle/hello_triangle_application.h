@@ -77,6 +77,9 @@ private:
 	void createGraphicsPipeline();
 	void createCommandPool();
 	void createTextureImage();
+	std::pair<vk::raii::Image, vk::raii::DeviceMemory> createImage(
+		uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties
+	);
 	void createVertexBuffer();
 	void createIndexBuffer();
 	void createUniformBuffers();
@@ -88,6 +91,8 @@ private:
 	void createCommandBuffer();
 	void createSyncObjects();
 	void recordCommandBuffer(uint32_t imageIndex);
+	vk::raii::CommandBuffer beginSingleTimeCommands();
+	void endSingleTimeCommands(vk::raii::CommandBuffer&& commandBuffer);
 	void transition_image_layout(
 		uint32_t imageIndex,
 		vk::ImageLayout old_layout,
@@ -96,7 +101,19 @@ private:
 		vk::AccessFlags2 dst_access_mask,
 		vk::PipelineStageFlags2 src_stage_mask,
 		vk::PipelineStageFlags2 dst_stage_mask);
-	
+	void transitionImageLayout(
+		vk::raii::CommandBuffer& commandBuffer,
+		const vk::raii::Image& image,
+		vk::ImageLayout oldLayout,
+		vk::ImageLayout newLayout
+	);
+	void copyBufferToImage(
+		vk::raii::CommandBuffer& commandBuffer,
+		const vk::raii::Buffer& buffer,
+		vk::raii::Image& image,
+		uint32_t width,
+		uint32_t height
+	);
 	void mainLoop();
 	void drawFrame();
 	void updateUniformBuffer(uint32_t currentImage);

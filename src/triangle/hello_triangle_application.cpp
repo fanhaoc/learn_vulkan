@@ -458,6 +458,53 @@ void HelloTriangleApplication::createTextureImage() {
 	memcpy(data, pixels, imageSize);
 	stagingBufferMemory.unmapMemory();
 	stbi_image_free(pixels);
+
+	std::tie(textureImage, textureImageMemory) = createImage(
+		texWidth,
+		texHeight,
+		vk::Format::eR8G8B8A8Srgb,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+		vk::MemoryPropertyFlagBits::eDeviceLocal
+	);
+
+	vk::raii::CommandBuffer commandBuffer = beginSingleTimeCommands();
+	transitionImageLayout(
+		commandBuffer, textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal
+	);
+	copyBufferToImage(commandBuffer, staginBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+	transitionImageLayout(
+		commandBuffer, textureImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal
+	);
+	endSingleTimeCommands(std::move(commandBuffer));
+}
+
+std::pair<vk::raii::Image, vk::raii::DeviceMemory> HelloTriangleApplication::createImage(
+	uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties
+) {
+	vk::ImageCreateInfo imageInfo{
+		.imageType = vk::ImageType::e2D,
+		.format = format,
+		.extent = { width, height, 1 },
+		.mipLevels = 1,
+		.arrayLayers = 1,
+		.samples = vk::SampleCountFlagBits::e1,
+		.tiling = tiling,
+		.usage = usage,
+		.sharingMode = vk::SharingMode::eExclusive
+	};
+
+	vk::raii::Image image = vk::raii::Image(device, imageInfo);
+
+	vk::MemoryRequirements memRequirements = image.getMemoryRequirements();
+	vk::MemoryAllocateInfo allocInfo{
+		.allocationSize = memRequirements.size,
+		.memoryTypeIndex = findMemorytype(memRequirements.memoryTypeBits, properties)
+	};
+
+	vk::raii::DeviceMemory imageMemory = vk::raii::DeviceMemory(device, allocInfo);
+	image.bindMemory(imageMemory, 0);
+	return { std::move(image), std::move(imageMemory) };
 }
 
 void HelloTriangleApplication::createVertexBuffer() {
@@ -563,19 +610,9 @@ std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> HelloTriangleApplication::cr
 }
 
 void HelloTriangleApplication::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size){
-	vk::CommandBufferAllocateInfo allocInfo{
-		.commandPool = commandPool,
-		.level = vk::CommandBufferLevel::ePrimary,
-		.commandBufferCount = 1
-	};
-	vk::raii::CommandBuffer commandCopyBuffer = std::move(device.allocateCommandBuffers(allocInfo).front());
-	// 记录命令
-	commandCopyBuffer.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
-	commandCopyBuffer.copyBuffer(*srcBuffer, *dstBuffer, vk::BufferCopy(0, 0, size));
-	commandCopyBuffer.end();
-	// 执行命令
-	graphicsQueue.submit(vk::SubmitInfo{ .commandBufferCount = 1, .pCommandBuffers = &*commandCopyBuffer }, nullptr);
-	graphicsQueue.waitIdle();
+	vk::raii::CommandBuffer commandCopyBuffer = beginSingleTimeCommands();
+	commandCopyBuffer.copyBuffer(*srcBuffer, *dstBuffer, vk::BufferCopy{ .size = size });
+	endSingleTimeCommands(std::move(commandCopyBuffer));
 }
 
 uint32_t HelloTriangleApplication::findMemorytype(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
@@ -667,6 +704,34 @@ void HelloTriangleApplication::recordCommandBuffer(uint32_t imageIndex) {
 	commandBuffers[frameIndex].end();
 }
 
+vk::raii::CommandBuffer HelloTriangleApplication::beginSingleTimeCommands() {
+	vk::CommandBufferAllocateInfo allocInfo{
+		.commandPool = commandPool,
+		.level = vk::CommandBufferLevel::ePrimary,
+		.commandBufferCount = 1
+	};
+	vk::raii::CommandBuffer commandBuffer = std::move(
+		vk::raii::CommandBuffers(device, allocInfo).front()
+	);
+
+	vk::CommandBufferBeginInfo beginInfo{
+		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+	};
+	commandBuffer.begin(beginInfo);
+	return std::move(commandBuffer);
+}
+
+void HelloTriangleApplication::endSingleTimeCommands(vk::raii::CommandBuffer&& commandBuffer) {
+	commandBuffer.end();
+
+	vk::SubmitInfo submitInfo{
+		.commandBufferCount = 1,
+		.pCommandBuffers = &*commandBuffer
+	};
+	graphicsQueue.submit(submitInfo, nullptr);
+	graphicsQueue.waitIdle();
+}
+
 void HelloTriangleApplication::transition_image_layout(
 	uint32_t imageIndex,
 	vk::ImageLayout old_layout,
@@ -674,7 +739,8 @@ void HelloTriangleApplication::transition_image_layout(
 	vk::AccessFlags2 src_access_mask,
 	vk::AccessFlags2 dst_access_mask,
 	vk::PipelineStageFlags2 src_stage_mask,
-	vk::PipelineStageFlags2 dst_stage_mask) {
+	vk::PipelineStageFlags2 dst_stage_mask
+) {
 	vk::ImageMemoryBarrier2 barrier = {
 		.srcStageMask = src_stage_mask,
 		.srcAccessMask = src_access_mask,
@@ -699,6 +765,59 @@ void HelloTriangleApplication::transition_image_layout(
 		.pImageMemoryBarriers = &barrier
 	};
 	commandBuffers[frameIndex].pipelineBarrier2(dependency_info);
+}
+
+void HelloTriangleApplication::transitionImageLayout(
+	vk::raii::CommandBuffer& commandBuffer,
+	const vk::raii::Image& image,
+	vk::ImageLayout oldLayout,
+	vk::ImageLayout newLayout
+) {
+	vk::ImageMemoryBarrier barrier{
+		.oldLayout = oldLayout,
+		.newLayout = newLayout,
+		.srcQueueFamilyIndex = vk::QueueFamilyIgnored,
+		.dstQueueFamilyIndex = vk::QueueFamilyIgnored,
+		.image = image,
+		.subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor, .levelCount = 1, .layerCount = 1}
+	};
+	vk::PipelineStageFlags sourceStage;
+	vk::PipelineStageFlags destinationStage;
+
+	if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal) {
+		barrier.srcAccessMask = {};
+		barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+		sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+		destinationStage = vk::PipelineStageFlagBits::eTransfer;
+	}
+	else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+		barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+		barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+		sourceStage = vk::PipelineStageFlagBits::eTransfer;
+		destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+	}
+	else {
+		throw std::invalid_argument("unsupported layout transition!");
+	}
+	commandBuffer.pipelineBarrier(sourceStage, destinationStage, {}, {}, nullptr, barrier);
+}
+
+void HelloTriangleApplication::copyBufferToImage(
+	vk::raii::CommandBuffer& commandBuffer,
+	const vk::raii::Buffer& buffer,
+	vk::raii::Image& image,
+	uint32_t width,
+	uint32_t height
+) {
+	vk::BufferImageCopy region{
+		.bufferOffset = 0,
+		.bufferRowLength = 0,
+		.bufferImageHeight = 0,
+		.imageSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+		.imageOffset = {0, 0, 0},
+		.imageExtent = {width, height, 1}
+	};
+	commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, region);
 }
 
 void HelloTriangleApplication::mainLoop() {

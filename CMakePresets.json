@@ -12,7 +12,7 @@
             "generator": "Visual Studio 18 2026",
             "binaryDir": "${sourceDir}/build/${presetName}",
             "cacheVariables": {
-                "CMAKE_CXX_FLAGS": "-Wall -Wextra",
+                "CMAKE_CXX_FLAGS": "/W4",
                 "CMAKE_TOOLCHAIN_FILE": "$penv{VCPKG_HOME}/scripts/buildsystems/vcpkg.cmake",
                 "VCPKG_TARGET_TRIPLET": "x64-windows",
                 "ARCHITECTURE": "x64"
